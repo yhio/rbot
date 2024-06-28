@@ -164,8 +164,9 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 }
 
 func (r *Retrieve) tasks(ctx context.Context) ([]task, error) {
-	//SELECT * FROM Deals WHERE DATE(last_retrieve) < DATE('now');
-	rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE last_update IS NULL`)
+	//SELECT * FROM Deals WHERE DATE(last_update) < DATE('now');
+	//SELECT deal_id,payload_cid,provider FROM Deals WHERE last_update IS NULL
+	rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE DATE(last_update) < DATE('now')`)
 	if err != nil {
 		return nil, err
 	}
