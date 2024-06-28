@@ -93,7 +93,7 @@ func (oc *OnChain) SubscribeDealActivatedEvent(ctx context.Context) {
 		var client int64
 		var provider int64
 		for _, e := range event.Entries {
-			log.Debugw("entries", "key", e.Key)
+			//log.Debugw("entries", "key", e.Key)
 
 			if e.Key == "$type" && bytes.Equal(e.Value, dealActivatedCbor) {
 				isDeal = true

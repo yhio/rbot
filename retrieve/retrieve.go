@@ -91,7 +91,7 @@ func (r *Retrieve) check(ctx context.Context) error {
 }
 
 func (r *Retrieve) retrieve(ctx context.Context, t task) error {
-	log.Debugw("retrieving", "task", t)
+	log.Debugw("retrieving", "dealID", t.dealID)
 
 	mi, err := r.lotusApi.StateMinerInfo(ctx, t.provider, types.EmptyTSK)
 	if err != nil {
@@ -115,7 +115,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 		if err != nil {
 			return err
 		}
-		log.Infow("update deal", "id", t.dealID, "index result", "NOT_FOUND")
+		log.Infow("update deal", "id", t.dealID, "index_result", "NOT_FOUND")
 		return nil
 	}
 
@@ -151,21 +151,19 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 		err_msg = err.Error()
 	}
 
-	log.Debugw("fetch", "id", t.dealID, "result", fetch_result, "stats", stats)
+	log.Debugw("fetch", "id", t.dealID, "fetch_result", fetch_result, "stats", stats)
 
 	_, err = r.repo.DB.ExecContext(ctx, `UPDATE Deals SET indexer_result=$1, fetch_result=$2, err_msg=$3, last_update=datetime('now') WHERE deal_id=$4`, "OK", fetch_result, err_msg, t.dealID)
 	if err != nil {
 		return err
 	}
 
-	log.Infow("update deal", "id", t.dealID, "fetch result", fetch_result, "err msg", err_msg)
+	log.Infow("update deal", "id", t.dealID, "fetch_result", fetch_result, "err_msg", err_msg)
 	return nil
 }
 
 func (r *Retrieve) tasks(ctx context.Context) ([]task, error) {
-	//SELECT * FROM Deals WHERE DATE(last_update) < DATE('now');
-	//SELECT deal_id,payload_cid,provider FROM Deals WHERE last_update IS NULL
-	rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE DATE(last_update) < DATE('now')`)
+	rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE last_update IS NULL OR DATE(last_update) < DATE('now')`)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +195,6 @@ func (r *Retrieve) tasks(ctx context.Context) ([]task, error) {
 			provider:   addr,
 		})
 	}
-	log.Debugw("tasks", "tasks count", len(tasks))
+	log.Debugw("tasks", "counts", len(tasks))
 	return tasks, nil
 }
