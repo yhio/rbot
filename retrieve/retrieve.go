@@ -141,7 +141,6 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 			Protocols: protocols,
 		},
 	}
-	req.MaxBlocks = 1
 
 	fetch_result := "OK"
 	err_msg := ""

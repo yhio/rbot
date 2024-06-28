@@ -5,5 +5,5 @@ retrieval bot
 - Save Deal(deal_id, payload_cid, client, provider) to DB(sqlite3).
 - Read the Deal that need to be retrieved (retrieve once a day) from the DB regularly.
 - Lookup indexer(cid.contact) to find SP address of payloadCid.
-- Fetch RootCid(one block) from SP.
+- Fetch RootCid(DagScopeBlock) from SP.
 - Update Deal(indexer_result, fetch_result, last_update) to DB.
