@@ -16,6 +16,7 @@ import (
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	trustlessutils "github.com/ipld/go-trustless-utils"
+	"github.com/ipni/go-libipni/metadata"
 )
 
 var log = logging.Logger("retrieve")
@@ -118,21 +119,36 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 		return nil
 	}
 
+	err = target.Metadata.Validate()
+	if err != nil {
+		return err
+	}
+
 	store := storage.NewDeferredStorageCar(os.TempDir(), target.RootCid)
 	req, err := ltypes.NewRequestForPath(store, target.RootCid, "", trustlessutils.DagScopeBlock, nil)
 	if err != nil {
 		return err
 	}
-	req.Providers = []ltypes.Provider{
-		{Peer: target.MinerPeer},
+
+	protocols := []metadata.Protocol{}
+	for _, mc := range target.Metadata.Protocols() {
+		protocols = append(protocols, target.Metadata.Get(mc))
+
 	}
+	req.Providers = []ltypes.Provider{
+		{
+			Peer:      target.MinerPeer,
+			Protocols: protocols,
+		},
+	}
+	req.MaxBlocks = 1
 
 	fetch_result := "OK"
 	err_msg := ""
 	stats, err := r.lassie.Fetch(ctx, req)
 	if err != nil {
 		log.Error(err)
-		fetch_result = "ERROR"
+		fetch_result = "ERR"
 		err_msg = err.Error()
 	}
 
