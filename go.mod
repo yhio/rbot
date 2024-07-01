@@ -5,9 +5,9 @@ go 1.22.3
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/filecoin-project/go-address v1.1.0
-	github.com/filecoin-project/go-jsonrpc v0.3.1
-	github.com/filecoin-project/go-state-types v0.13.3
-	github.com/filecoin-project/lotus v1.27.0
+	github.com/filecoin-project/go-jsonrpc v0.3.2
+	github.com/filecoin-project/go-state-types v0.14.0-dev
+	github.com/filecoin-project/lotus v1.27.1
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/ipld/go-ipld-prime v0.21.0
 	github.com/ipld/go-trustless-utils v0.4.1
@@ -90,7 +90,6 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
-	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/GeertJohan/go.incremental v1.0.0 // indirect
 	github.com/GeertJohan/go.rice v1.0.3 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
@@ -117,11 +116,9 @@ require (
 	github.com/filecoin-project/go-cbor-util v0.0.1 // indirect
 	github.com/filecoin-project/go-crypto v0.0.1 // indirect
 	github.com/filecoin-project/go-data-transfer/v2 v2.0.0-rc8 // indirect
-	github.com/filecoin-project/go-fil-markets v1.28.3 // indirect
 	github.com/filecoin-project/go-hamt-ipld v0.1.5 // indirect
 	github.com/filecoin-project/go-hamt-ipld/v2 v2.0.0 // indirect
 	github.com/filecoin-project/go-hamt-ipld/v3 v3.1.0 // indirect
-	github.com/filecoin-project/go-padreader v0.0.1 // indirect
 	github.com/filecoin-project/go-statemachine v1.0.3 // indirect
 	github.com/filecoin-project/go-statestore v0.2.0 // indirect
 	github.com/filecoin-project/lassie v0.23.0
@@ -160,7 +157,6 @@ require (
 	github.com/ipfs/go-blockservice v0.5.2 // indirect
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-datastore v0.6.0 // indirect
-	github.com/ipfs/go-ds-badger2 v0.1.3 // indirect
 	github.com/ipfs/go-ds-leveldb v0.5.0 // indirect
 	github.com/ipfs/go-ds-measure v0.2.0 // indirect
 	github.com/ipfs/go-fs-lock v0.0.7 // indirect
@@ -178,7 +174,6 @@ require (
 	github.com/ipfs/go-verifcid v0.0.3 // indirect
 	github.com/ipld/go-car v0.6.2 // indirect
 	github.com/ipld/go-codec-dagpb v1.6.0 // indirect
-	github.com/ipld/go-ipld-selector-text-lite v0.0.1 // indirect
 	github.com/ipsn/go-secp256k1 v0.0.0-20180726113642-9d62b9f0bc52 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/jessevdk/go-flags v1.4.0 // indirect
