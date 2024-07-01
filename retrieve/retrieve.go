@@ -3,6 +3,7 @@ package retrieve
 import (
 	"context"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/filecoin-project/go-address"
@@ -60,7 +61,9 @@ func New(ctx context.Context, repo *repo.Repo, lotusApi lotusApi) (*Retrieve, er
 }
 
 func (r *Retrieve) Run(ctx context.Context) {
-	t := time.NewTicker(time.Minute)
+	t := time.NewTicker(time.Duration(r.repo.Conf.Interval))
+	defer t.Stop()
+
 	for {
 		select {
 		case <-t.C:
@@ -80,17 +83,29 @@ func (r *Retrieve) check(ctx context.Context) error {
 		return err
 	}
 
+	var wg sync.WaitGroup
+	throttle := make(chan struct{}, r.repo.Conf.Parallel)
 	for _, t := range tasks {
-		err := r.retrieve(ctx, t)
-		if err != nil {
-			log.Error(err)
-		}
-	}
+		wg.Add(1)
+		throttle <- struct{}{}
 
+		go func(t *task) {
+			defer wg.Done()
+			defer func() {
+				<-throttle
+			}()
+
+			err := r.retrieve(ctx, t)
+			if err != nil {
+				log.Error(err)
+			}
+		}(t)
+	}
+	wg.Wait()
 	return nil
 }
 
-func (r *Retrieve) retrieve(ctx context.Context, t task) error {
+func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 	log.Debugw("retrieving", "dealID", t.dealID)
 
 	mi, err := r.lotusApi.StateMinerInfo(ctx, t.provider, types.EmptyTSK)
@@ -108,14 +123,14 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 		return err
 	}
 
-	log.Debugw("FindCandidates", "id", t.dealID, "target", target)
+	log.Debugw("FindCandidates", "dealID", t.dealID, "target", target)
 
 	if !target.RootCid.Equals(t.payloadCID) || target.MinerPeer.ID != *mi.PeerId {
 		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET indexer_result=$1, last_update=datetime('now') WHERE deal_id=$2`, "NOT_FOUND", t.dealID)
 		if err != nil {
 			return err
 		}
-		log.Infow("update deal", "id", t.dealID, "index_result", "NOT_FOUND")
+		log.Infow("update deal", "dealID", t.dealID, "index_result", "NOT_FOUND")
 		return nil
 	}
 
@@ -151,25 +166,25 @@ func (r *Retrieve) retrieve(ctx context.Context, t task) error {
 		err_msg = err.Error()
 	}
 
-	log.Debugw("fetch", "id", t.dealID, "fetch_result", fetch_result, "stats", stats)
+	log.Debugw("fetch", "dealID", t.dealID, "fetch_result", fetch_result, "stats", stats)
 
 	_, err = r.repo.DB.ExecContext(ctx, `UPDATE Deals SET indexer_result=$1, fetch_result=$2, err_msg=$3, last_update=datetime('now') WHERE deal_id=$4`, "OK", fetch_result, err_msg, t.dealID)
 	if err != nil {
 		return err
 	}
 
-	log.Infow("update deal", "id", t.dealID, "fetch_result", fetch_result, "err_msg", err_msg)
+	log.Infow("update deal", "dealID", t.dealID, "fetch_result", fetch_result, "err_msg", err_msg)
 	return nil
 }
 
-func (r *Retrieve) tasks(ctx context.Context) ([]task, error) {
+func (r *Retrieve) tasks(ctx context.Context) ([]*task, error) {
 	rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE last_update IS NULL OR DATE(last_update) < DATE('now')`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	tasks := []task{}
+	tasks := []*task{}
 	for rows.Next() {
 		var dealID int64
 		var payloadCID, provider string
@@ -189,7 +204,7 @@ func (r *Retrieve) tasks(ctx context.Context) ([]task, error) {
 			log.Error(err)
 			continue
 		}
-		tasks = append(tasks, task{
+		tasks = append(tasks, &task{
 			dealID:     dealID,
 			payloadCID: payload,
 			provider:   addr,
