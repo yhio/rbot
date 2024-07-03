@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Deals</title>
+</head>
+<body>
+    <h1>Deals</h1>
+    <form method="GET" action="/">
+        <label for="client">Client:</label>
+        <input type="text" id="client" name="client" value="{{.Client}}">
+        <label for="provider">Provider:</label>
+        <input type="text" id="provider" name="provider" value="{{.Provider}}">
+        <button type="submit">Search</button>
+    </form>
+    <table border="1">
+        <tr>
+            <th>Deal ID</th>
+            <th>Payload CID</th>
+            <th>Client</th>
+            <th>Provider</th>
+            <th>Start Epoch</th>
+            <th>End Epoch</th>
+            <th>Indexer Result</th>
+            <th>Fetch Result</th>
+            <th>Error Message</th>
+            <th>Last Update</th>
+        </tr>
+        {{range .Deals}}
+        <tr>
+            <td>{{.DealID}}</td>
+            <td>{{.PayloadCID}}</td>
+            <td>{{.Client}}</td>
+            <td>{{.Provider}}</td>
+            <td>{{.StartEpoch}}</td>
+            <td>{{.EndEpoch}}</td>
+            <td>{{.IndexerResult}}</td>
+            <td>{{.FetchResult}}</td>
+            <td>{{.ErrMsg}}</td>
+            <td>{{.LastUpdate}}</td>
+        </tr>
+        {{end}}
+    </table>
+    <div>
+        <a href="/?client={{.Client}}&provider={{.Provider}}&page={{.PrevPage}}">Previous</a>
+        <a href="/?client={{.Client}}&provider={{.Provider}}&page={{.NextPage}}">Next</a>
+    </div>
+</body>
+</html>

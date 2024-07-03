@@ -14,6 +14,7 @@ import (
 	"github.com/gh-efforts/rbot/onchain"
 	"github.com/gh-efforts/rbot/repo"
 	"github.com/gh-efforts/rbot/retrieve"
+	"github.com/gh-efforts/rbot/web"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/urfave/cli/v2"
@@ -117,6 +118,7 @@ var runCmd = &cli.Command{
 		log.Infow("rbot server", "listen", listen)
 
 		http.Handle("/metrics", exporter)
+		web.New(r).Handle()
 
 		server := &http.Server{
 			Addr: listen,
@@ -153,4 +155,5 @@ func setLog(debug bool) {
 	logging.SetLogLevel("repo", level)
 	logging.SetLogLevel("onchain", level)
 	logging.SetLogLevel("retrieve", level)
+	logging.SetLogLevel("web", level)
 }
