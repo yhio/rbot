@@ -50,11 +50,7 @@ func New(repo *repo.Repo) *Web {
 	}
 }
 
-func (e *Web) Handle() {
-	http.HandleFunc("/", e.index)
-}
-
-func (e *Web) index(w http.ResponseWriter, r *http.Request) {
+func (e *Web) Index(w http.ResponseWriter, r *http.Request) {
 	db := e.repo.DB
 
 	client := r.URL.Query().Get("client")
@@ -84,10 +80,10 @@ func (e *Web) index(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var deals []Deal
-	var indexerResult, fetchResult, errMsg sql.NullString
+	var indexerResult, fetchResult, errMsg, lastUpdate sql.NullString
 	for rows.Next() {
 		var deal Deal
-		err := rows.Scan(&deal.DealID, &deal.PayloadCID, &deal.Client, &deal.Provider, &deal.StartEpoch, &deal.EndEpoch, &indexerResult, &fetchResult, &errMsg, &deal.LastUpdate)
+		err := rows.Scan(&deal.DealID, &deal.PayloadCID, &deal.Client, &deal.Provider, &deal.StartEpoch, &deal.EndEpoch, &indexerResult, &fetchResult, &errMsg, &lastUpdate)
 		if err != nil {
 			log.Error(err)
 			continue
@@ -95,6 +91,7 @@ func (e *Web) index(w http.ResponseWriter, r *http.Request) {
 		deal.IndexerResult = indexerResult.String
 		deal.FetchResult = fetchResult.String
 		deal.ErrMsg = errMsg.String
+		deal.LastUpdate = lastUpdate.String
 		deals = append(deals, deal)
 	}
 

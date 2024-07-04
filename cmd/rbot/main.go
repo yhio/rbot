@@ -9,6 +9,7 @@ import (
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	cliutil "github.com/filecoin-project/lotus/cli/util"
+	"github.com/gh-efforts/rbot/backfill"
 	"github.com/gh-efforts/rbot/build"
 	"github.com/gh-efforts/rbot/metrics"
 	"github.com/gh-efforts/rbot/onchain"
@@ -29,6 +30,7 @@ func main() {
 	local := []*cli.Command{
 		initCmd,
 		runCmd,
+		backfillCmd,
 		pprofCmd,
 	}
 
@@ -118,7 +120,8 @@ var runCmd = &cli.Command{
 		log.Infow("rbot server", "listen", listen)
 
 		http.Handle("/metrics", exporter)
-		web.New(r).Handle()
+		http.HandleFunc("/", web.New(r).Index)
+		http.HandleFunc("/backfill", backfill.New(r).Fill)
 
 		server := &http.Server{
 			Addr: listen,
@@ -156,4 +159,5 @@ func setLog(debug bool) {
 	logging.SetLogLevel("onchain", level)
 	logging.SetLogLevel("retrieve", level)
 	logging.SetLogLevel("web", level)
+	logging.SetLogLevel("backfill", level)
 }

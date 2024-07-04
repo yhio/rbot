@@ -13,8 +13,9 @@ import (
 var log = logging.Logger("repo")
 
 const (
-	fsDB     = "rbot.db"
-	fsConfig = "config.json"
+	fsDB         = "rbot.db"
+	fsConfig     = "config.json"
+	fsMarketDeal = "StateMarketDeals.json.zst"
 )
 
 type Repo struct {
@@ -44,6 +45,10 @@ func New(path string) (*Repo, error) {
 		DB:   db,
 		Conf: conf,
 	}, nil
+}
+
+func (r *Repo) StorageMarketDealFile() string {
+	return filepath.Join(r.path, fsMarketDeal)
 }
 
 func Init(ctx context.Context, path string) error {
