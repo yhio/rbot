@@ -2,9 +2,10 @@ package retrieve
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/lassie/pkg/indexerlookup"
@@ -18,6 +19,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	trustlessutils "github.com/ipld/go-trustless-utils"
 	"github.com/ipni/go-libipni/metadata"
+	"github.com/robfig/cron/v3"
 )
 
 var log = logging.Logger("retrieve")
@@ -37,6 +39,12 @@ type task struct {
 	dealID     int64
 	payloadCID cid.Cid
 	provider   address.Address
+}
+
+type ManualParam struct {
+	Providers []string `json:"providers"`
+	Limit     int      `json:"limit"`
+	Parallel  int      `json:"parallel"`
 }
 
 func New(ctx context.Context, repo *repo.Repo, lotusApi lotusApi) (*Retrieve, error) {
@@ -61,30 +69,71 @@ func New(ctx context.Context, repo *repo.Repo, lotusApi lotusApi) (*Retrieve, er
 }
 
 func (r *Retrieve) Run(ctx context.Context) {
-	t := time.NewTicker(time.Duration(r.repo.Conf.Interval))
-	defer t.Stop()
-
-	for {
-		select {
-		case <-t.C:
-			err := r.check(ctx)
-			if err != nil {
-				log.Error(err)
-			}
-		case <-ctx.Done():
-			return
+	c := cron.New()
+	_, err := c.AddFunc("CRON_TZ=Asia/Shanghai 30 01 * * *", func() {
+		err := r.cronRetrieve(ctx)
+		if err != nil {
+			log.Error(err)
 		}
+	})
+	if err != nil {
+		panic(err)
 	}
+	c.Start()
 }
 
-func (r *Retrieve) check(ctx context.Context) error {
-	tasks, err := r.tasks(ctx)
+func (r *Retrieve) cronRetrieve(ctx context.Context) error {
+	log.Debug("cron retrieve start")
+
+	providers, err := r.providers(ctx)
+	if err != nil {
+		return err
+	}
+	tasks, err := r.tasks(ctx, providers, r.repo.Conf.Limit)
 	if err != nil {
 		return err
 	}
 
+	err = r.retrieves(ctx, tasks, r.repo.Conf.Parallel)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Retrieve) ManualRetrieve(w http.ResponseWriter, req *http.Request) {
+	var mp ManualParam
+	err := json.NewDecoder(req.Body).Decode(&mp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = r.manualRetrieve(req.Context(), &mp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (r *Retrieve) manualRetrieve(ctx context.Context, mp *ManualParam) error {
+	log.Debugw("manulRetrieve", "providers", mp.Providers, "limit", mp.Limit, "parallel", mp.Parallel)
+
+	tasks, err := r.tasks(ctx, mp.Providers, mp.Limit)
+	if err != nil {
+		return err
+	}
+
+	err = r.retrieves(ctx, tasks, mp.Parallel)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, parallel int) error {
 	var wg sync.WaitGroup
-	throttle := make(chan struct{}, r.repo.Conf.Parallel)
+	throttle := make(chan struct{}, parallel)
 	for _, t := range tasks {
 		wg.Add(1)
 		throttle <- struct{}{}
@@ -177,39 +226,63 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 	return nil
 }
 
-func (r *Retrieve) tasks(ctx context.Context) ([]*task, error) {
-	rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE last_update IS NULL OR DATE(last_update) < DATE('now')`)
+func (r *Retrieve) tasks(ctx context.Context, providers []string, limit int) ([]*task, error) {
+	tasks := []*task{}
+	for _, p := range providers {
+		rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 ORDER BY RANDOM() LIMIT $2`, p, limit)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var dealID int64
+			var payloadCID, provider string
+
+			err := rows.Scan(&dealID, &payloadCID, &provider)
+			if err != nil {
+				return nil, err
+			}
+
+			payload, err := cid.Parse(payloadCID)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			addr, err := address.NewFromString(provider)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			tasks = append(tasks, &task{
+				dealID:     dealID,
+				payloadCID: payload,
+				provider:   addr,
+			})
+		}
+	}
+
+	log.Debugw("tasks", "providers", providers, "limit", limit, "counts", len(tasks))
+	return tasks, nil
+}
+
+func (r *Retrieve) providers(ctx context.Context) ([]string, error) {
+	rows, err := r.repo.DB.QueryContext(ctx, `SELECT DISTINCT provider FROM Deals`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	tasks := []*task{}
+	providers := []string{}
 	for rows.Next() {
-		var dealID int64
-		var payloadCID, provider string
-
-		err := rows.Scan(&dealID, &payloadCID, &provider)
+		var provider string
+		err := rows.Scan(&provider)
 		if err != nil {
 			return nil, err
 		}
-
-		payload, err := cid.Parse(payloadCID)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		addr, err := address.NewFromString(provider)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		tasks = append(tasks, &task{
-			dealID:     dealID,
-			payloadCID: payload,
-			provider:   addr,
-		})
+		providers = append(providers, provider)
 	}
-	log.Debugw("tasks", "counts", len(tasks))
-	return tasks, nil
+
+	log.Debugf("provider: %s", providers)
+	return providers, nil
 }

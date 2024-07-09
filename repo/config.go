@@ -31,6 +31,7 @@ type Config struct {
 	Providers []string `json:"providers"`
 	Interval  Duration `json:"interval"`
 	Parallel  int      `json:"parallel"`
+	Limit     int      `json:"limit"`
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -57,6 +58,7 @@ func defaultConfig() *Config {
 		Providers: providers,
 		Interval:  Duration(time.Minute),
 		Parallel:  10,
+		Limit:     100,
 	}
 
 	return c

@@ -70,6 +70,7 @@ func (e *Web) Index(w http.ResponseWriter, r *http.Request) {
 	if provider != "" {
 		query += " AND provider LIKE '%" + provider + "%'"
 	}
+	query += " AND last_update IS NOT NULL ORDER BY last_update DESC"
 	query += " LIMIT ? OFFSET ?"
 
 	rows, err := db.Query(query, pageSize, offset)

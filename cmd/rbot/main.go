@@ -30,6 +30,7 @@ func main() {
 	local := []*cli.Command{
 		initCmd,
 		runCmd,
+		retrieveCmd,
 		backfillCmd,
 		pprofCmd,
 	}
@@ -122,6 +123,7 @@ var runCmd = &cli.Command{
 		http.Handle("/metrics", exporter)
 		http.HandleFunc("/", web.New(r).Index)
 		http.HandleFunc("/backfill", backfill.New(r).Fill)
+		http.HandleFunc("/retrieve", rt.ManualRetrieve)
 
 		server := &http.Server{
 			Addr: listen,
