@@ -1,8 +1,12 @@
 package retrieve
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sync"
@@ -225,6 +229,19 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 	}
 
 	log.Infow("update deal", "dealID", t.dealID, "fetch_result", fetch_result, "err_msg", err_msg)
+
+	addr := os.Getenv("RETRIEVE_SERVER_ADDR")
+	if addr != "" && fetch_result == "OK" {
+		block, err := store.Get(ctx, target.RootCid.KeyString())
+		if err != nil {
+			return err
+		}
+		if len(block) != int(stats.Size) {
+			return errors.New("post size not match")
+		}
+		return PostRootBlock(addr, target.RootCid.String(), block)
+	}
+
 	return nil
 }
 
@@ -287,4 +304,38 @@ func (r *Retrieve) providers(ctx context.Context) ([]string, error) {
 
 	log.Debugf("provider: %s", providers)
 	return providers, nil
+}
+
+type RootBlock struct {
+	Root  string `json:"root"`
+	Block []byte `json:"block"`
+}
+
+func PostRootBlock(addr string, root string, block []byte) error {
+	rb := RootBlock{
+		Root:  root,
+		Block: block,
+	}
+
+	body, err := json.Marshal(&rb)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://%s/block", addr)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		r, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("status: %s msg: %s", resp.Status, string(r))
+	}
+
+	return nil
 }
