@@ -75,6 +75,7 @@ func (r *Retrieve) Run(ctx context.Context) {
 		if err != nil {
 			log.Error(err)
 		}
+		//TODO: gc: remove expired deal from db
 	})
 	if err != nil {
 		panic(err)
@@ -189,6 +190,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 	}
 
 	store := storage.NewDeferredStorageCar(os.TempDir(), target.RootCid)
+	defer store.Close()
 	req, err := ltypes.NewRequestForPath(store, target.RootCid, "", trustlessutils.DagScopeBlock, nil)
 	if err != nil {
 		return err
