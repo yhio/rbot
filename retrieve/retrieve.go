@@ -3,12 +3,13 @@ package retrieve
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/filecoin-project/go-address"
@@ -16,27 +17,18 @@ import (
 	"github.com/filecoin-project/lassie/pkg/lassie"
 	"github.com/filecoin-project/lassie/pkg/storage"
 	ltypes "github.com/filecoin-project/lassie/pkg/types"
-	"github.com/filecoin-project/lotus/api"
-	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/gh-efforts/rbot/repo"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	trustlessutils "github.com/ipld/go-trustless-utils"
-	"github.com/ipni/go-libipni/metadata"
-	"github.com/robfig/cron/v3"
 )
 
 var log = logging.Logger("retrieve")
 
-type lotusApi interface {
-	StateMinerInfo(context.Context, address.Address, types.TipSetKey) (api.MinerInfo, error)
-}
-
 type Retrieve struct {
-	repo     *repo.Repo
-	lotusApi lotusApi
-	lassie   *lassie.Lassie
-	indexer  *indexerlookup.IndexerCandidateSource
+	repo    *repo.Repo
+	lassie  *lassie.Lassie
+	indexer *indexerlookup.IndexerCandidateSource
 }
 
 type task struct {
@@ -51,7 +43,7 @@ type ManualParam struct {
 	Parallel  int      `json:"parallel"`
 }
 
-func New(ctx context.Context, repo *repo.Repo, lotusApi lotusApi) (*Retrieve, error) {
+func New(ctx context.Context, repo *repo.Repo) (*Retrieve, error) {
 	lassie, err := lassie.NewLassie(ctx)
 	if err != nil {
 		return nil, err
@@ -63,48 +55,12 @@ func New(ctx context.Context, repo *repo.Repo, lotusApi lotusApi) (*Retrieve, er
 	}
 
 	r := &Retrieve{
-		repo:     repo,
-		lotusApi: lotusApi,
-		lassie:   lassie,
-		indexer:  indexer,
+		repo:    repo,
+		lassie:  lassie,
+		indexer: indexer,
 	}
 
 	return r, nil
-}
-
-func (r *Retrieve) Run(ctx context.Context) {
-	c := cron.New()
-	_, err := c.AddFunc("CRON_TZ=Asia/Shanghai 30 01 * * *", func() {
-		err := r.cronRetrieve(ctx)
-		if err != nil {
-			log.Error(err)
-		}
-		//TODO: gc: remove expired deal from db
-	})
-	if err != nil {
-		panic(err)
-	}
-	c.Start()
-}
-
-func (r *Retrieve) cronRetrieve(ctx context.Context) error {
-	log.Debug("cron retrieve start")
-
-	providers, err := r.providers(ctx)
-	if err != nil {
-		return err
-	}
-	tasks, err := r.tasks(ctx, providers, r.repo.Conf.Limit)
-	if err != nil {
-		return err
-	}
-
-	err = r.retrieves(ctx, tasks, r.repo.Conf.Parallel)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *Retrieve) ManualRetrieve(w http.ResponseWriter, req *http.Request) {
@@ -123,6 +79,14 @@ func (r *Retrieve) ManualRetrieve(w http.ResponseWriter, req *http.Request) {
 
 func (r *Retrieve) manualRetrieve(ctx context.Context, mp *ManualParam) error {
 	log.Debugw("manulRetrieve", "providers", mp.Providers, "limit", mp.Limit, "parallel", mp.Parallel)
+
+	var err error
+	if mp.Providers == nil {
+		mp.Providers, err = r.providers(ctx)
+		if err != nil {
+			return err
+		}
+	}
 
 	tasks, err := r.tasks(ctx, mp.Providers, mp.Limit)
 	if err != nil {
@@ -160,95 +124,58 @@ func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, parallel int) e
 }
 
 func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
-	log.Debugw("retrieving", "dealID", t.dealID)
-
-	mi, err := r.lotusApi.StateMinerInfo(ctx, t.provider, types.EmptyTSK)
-	if err != nil {
-		return err
-	}
-
-	target := ltypes.RetrievalCandidate{}
-	err = r.indexer.FindCandidates(ctx, t.payloadCID, func(rc ltypes.RetrievalCandidate) {
-		if rc.MinerPeer.ID == *mi.PeerId {
-			target = rc
-		}
-	})
-	if err != nil {
-		return err
-	}
-
-	log.Debugw("FindCandidates", "dealID", t.dealID, "target", target)
-
-	if !target.RootCid.Equals(t.payloadCID) || target.MinerPeer.ID != *mi.PeerId {
-		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET indexer_result=$1, last_update=datetime('now') WHERE deal_id=$2`, "NOT_FOUND", t.dealID)
-		if err != nil {
-			return err
-		}
-		log.Infow("update deal", "dealID", t.dealID, "index_result", "NOT_FOUND")
-		return nil
-	}
-
-	err = target.Metadata.Validate()
-	if err != nil {
-		return err
-	}
-
-	store := storage.NewDeferredStorageCar(os.TempDir(), target.RootCid)
+	store := storage.NewDeferredStorageCar(os.TempDir(), t.payloadCID)
 	defer store.Close()
-	req, err := ltypes.NewRequestForPath(store, target.RootCid, "", trustlessutils.DagScopeBlock, nil)
+
+	req, err := ltypes.NewRequestForPath(store, t.payloadCID, "", trustlessutils.DagScopeBlock, nil)
 	if err != nil {
 		return err
 	}
 
-	protocols := []metadata.Protocol{}
-	for _, mc := range target.Metadata.Protocols() {
-		protocols = append(protocols, target.Metadata.Get(mc))
-
-	}
-	req.Providers = []ltypes.Provider{
-		{
-			Peer:      target.MinerPeer,
-			Protocols: protocols,
-		},
-	}
-
-	fetch_result := "OK"
-	err_msg := ""
-	stats, err := r.lassie.Fetch(ctx, req)
-	if err != nil {
-		log.Error(err)
-		fetch_result = "ERR"
-		err_msg = err.Error()
-	}
-
-	log.Debugw("fetch", "dealID", t.dealID, "fetch_result", fetch_result, "stats", stats)
-
-	_, err = r.repo.DB.ExecContext(ctx, `UPDATE Deals SET indexer_result=$1, fetch_result=$2, err_msg=$3, last_update=datetime('now') WHERE deal_id=$4`, "OK", fetch_result, err_msg, t.dealID)
+	req.Providers, err = ltypes.ParseProviderStrings(r.repo.Conf.Providers[t.provider.String()])
 	if err != nil {
 		return err
 	}
 
-	log.Infow("update deal", "dealID", t.dealID, "fetch_result", fetch_result, "err_msg", err_msg)
-
-	addr := os.Getenv("RETRIEVE_SERVER_ADDR")
-	if addr != "" && fetch_result == "OK" {
-		block, err := store.Get(ctx, target.RootCid.KeyString())
-		if err != nil {
+	_, err = r.lassie.Fetch(ctx, req)
+	if err != nil {
+		if !strings.Contains(err.Error(), "there is no unsealed piece containing payload cid") {
 			return err
 		}
-		if len(block) != int(stats.Size) {
-			return errors.New("post size not match")
-		}
-		return PostRootBlock(addr, target.RootCid.String(), block)
+		//no unsealed
+		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1, WHERE deal_id=$2`, "NOUNSEALED", t.dealID)
+		return err
 	}
 
+	block, err := store.Get(ctx, t.payloadCID.KeyString())
+	if err != nil {
+		return err
+	}
+
+	err = PostRootBlock(r.repo.Conf.ServerAddr, t.payloadCID.String(), block)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1, WHERE deal_id=$2`, "OK", t.dealID)
+	if err != nil {
+		return err
+	}
+
+	log.Debugw("update deal", "dealID", t.dealID, "result", "OK")
 	return nil
 }
 
 func (r *Retrieve) tasks(ctx context.Context, providers []string, limit int) ([]*task, error) {
 	tasks := []*task{}
 	for _, p := range providers {
-		rows, err := r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 ORDER BY RANDOM() LIMIT $2`, p, limit)
+		var rows *sql.Rows
+		var err error
+		if limit == 0 {
+			rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL`, p)
+		} else {
+			rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL LIMIT $2`, p, limit)
+		}
 		if err != nil {
 			return nil, err
 		}

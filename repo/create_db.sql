@@ -6,10 +6,7 @@ CREATE TABLE IF NOT EXISTS Deals (
     start_epoch INT,
     end_epoch INT,
 
-    indexer_result TEXT,
-    fetch_result TEXT,
-    err_msg TEXT,
-    last_update DateTime,
+    result TEXT,
   
     PRIMARY KEY(deal_id)
 );
