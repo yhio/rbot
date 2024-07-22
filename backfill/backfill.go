@@ -34,7 +34,7 @@ func New(repo *repo.Repo) *Backfill {
 		providers: map[string]struct{}{},
 	}
 
-	for _, p := range repo.Conf.Providers {
+	for p := range repo.Conf.Providers {
 		b.providers[p] = struct{}{}
 	}
 
