@@ -143,7 +143,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 			return err
 		}
 		//no unsealed
-		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1, WHERE deal_id=$2`, "NOUNSEALED", t.dealID)
+		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1 WHERE deal_id=$2`, "NOUNSEALED", t.dealID)
 		return err
 	}
 
@@ -157,7 +157,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 		return err
 	}
 
-	_, err = r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1, WHERE deal_id=$2`, "OK", t.dealID)
+	_, err = r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1 WHERE deal_id=$2`, "OK", t.dealID)
 	if err != nil {
 		return err
 	}
