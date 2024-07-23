@@ -27,6 +27,10 @@ var retrieveCmd = &cli.Command{
 			Value: 10,
 		},
 		&cli.StringFlag{
+			Name:  "result",
+			Value: "",
+		},
+		&cli.StringFlag{
 			Name:  "connect",
 			Value: "127.0.0.1:5678",
 		},
@@ -36,6 +40,7 @@ var retrieveCmd = &cli.Command{
 			Providers: cctx.StringSlice("provider"),
 			Limit:     cctx.Int("limit"),
 			Parallel:  cctx.Int("parallel"),
+			Result:    cctx.String("result"),
 		}
 		body, err := json.Marshal(&mp)
 		if err != nil {

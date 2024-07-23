@@ -41,6 +41,7 @@ type ManualParam struct {
 	Providers []string `json:"providers"`
 	Limit     int      `json:"limit"`
 	Parallel  int      `json:"parallel"`
+	Result    string   `json:"result"`
 }
 
 func New(ctx context.Context, repo *repo.Repo) (*Retrieve, error) {
@@ -78,7 +79,7 @@ func (r *Retrieve) ManualRetrieve(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Retrieve) manualRetrieve(ctx context.Context, mp *ManualParam) error {
-	log.Debugw("manulRetrieve", "providers", mp.Providers, "limit", mp.Limit, "parallel", mp.Parallel)
+	log.Debugw("manulRetrieve", "providers", mp.Providers, "limit", mp.Limit, "parallel", mp.Parallel, "result", mp.Result)
 
 	var err error
 	if mp.Providers == nil {
@@ -88,7 +89,7 @@ func (r *Retrieve) manualRetrieve(ctx context.Context, mp *ManualParam) error {
 		}
 	}
 
-	tasks, err := r.tasks(ctx, mp.Providers, mp.Limit)
+	tasks, err := r.tasks(ctx, mp.Providers, mp.Limit, mp.Result)
 	if err != nil {
 		return err
 	}
@@ -139,8 +140,6 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 
 	_, err = r.lassie.Fetch(ctx, req)
 	if err != nil {
-		log.Errorw("fetch", "paylod", t.payloadCID, "err", err)
-
 		var result string
 		if strings.Contains(err.Error(), "retrieval timed out after") {
 			result = "TIMEOUT"
@@ -149,6 +148,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 		} else if strings.Contains(err.Error(), "there is no unsealed piece containing payload cid") {
 			result = "NOUNSEALED"
 		} else {
+			log.Errorw("fetch", "paylod", t.payloadCID, "err", err)
 			result = "ERR"
 		}
 
@@ -175,15 +175,24 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 	return nil
 }
 
-func (r *Retrieve) tasks(ctx context.Context, providers []string, limit int) ([]*task, error) {
+func (r *Retrieve) tasks(ctx context.Context, providers []string, limit int, result string) ([]*task, error) {
 	tasks := []*task{}
 	for _, p := range providers {
 		var rows *sql.Rows
 		var err error
 		if limit == 0 {
-			rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL`, p)
+			if result == "" {
+				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL`, p)
+			} else {
+				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result=$2`, p, result)
+			}
+
 		} else {
-			rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL LIMIT $2`, p, limit)
+			if result == "" {
+				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL LIMIT $2`, p, limit)
+			} else {
+				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result=$2 LIMIT $3`, p, result, limit)
+			}
 		}
 		if err != nil {
 			return nil, err
