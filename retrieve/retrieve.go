@@ -139,11 +139,20 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 
 	_, err = r.lassie.Fetch(ctx, req)
 	if err != nil {
-		if !strings.Contains(err.Error(), "there is no unsealed piece containing payload cid") {
-			return err
+		log.Errorw("fetch", "paylod", t.payloadCID, "err", err)
+
+		var result string
+		if strings.Contains(err.Error(), "retrieval timed out after") {
+			result = "TIMEOUT"
+		} else if strings.Contains(err.Error(), "not found") {
+			result = "NOTFOUND"
+		} else if strings.Contains(err.Error(), "there is no unsealed piece containing payload cid") {
+			result = "NOUNSEALED"
+		} else {
+			result = "ERR"
 		}
-		//no unsealed
-		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1 WHERE deal_id=$2`, "NOUNSEALED", t.dealID)
+
+		_, err := r.repo.DB.ExecContext(ctx, `UPDATE Deals SET result=$1 WHERE deal_id=$2`, result, t.dealID)
 		return err
 	}
 
