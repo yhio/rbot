@@ -42,6 +42,7 @@ type ManualParam struct {
 	Limit     int      `json:"limit"`
 	Parallel  int      `json:"parallel"`
 	Result    string   `json:"result"`
+	Post      bool     `json:"post"`
 }
 
 func New(ctx context.Context, repo *repo.Repo) (*Retrieve, error) {
@@ -79,7 +80,7 @@ func (r *Retrieve) ManualRetrieve(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Retrieve) manualRetrieve(ctx context.Context, mp *ManualParam) error {
-	log.Debugw("manulRetrieve", "providers", mp.Providers, "limit", mp.Limit, "parallel", mp.Parallel, "result", mp.Result)
+	log.Debugw("manulRetrieve", "providers", mp.Providers, "limit", mp.Limit, "parallel", mp.Parallel, "result", mp.Result, "post", mp.Post)
 
 	var err error
 	if mp.Providers == nil {
@@ -94,16 +95,16 @@ func (r *Retrieve) manualRetrieve(ctx context.Context, mp *ManualParam) error {
 		return err
 	}
 
-	err = r.retrieves(ctx, tasks, mp.Parallel)
+	err = r.retrieves(ctx, tasks, mp)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, parallel int) error {
+func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, mp *ManualParam) error {
 	var wg sync.WaitGroup
-	throttle := make(chan struct{}, parallel)
+	throttle := make(chan struct{}, mp.Parallel)
 	for _, t := range tasks {
 		wg.Add(1)
 		throttle <- struct{}{}
@@ -114,7 +115,7 @@ func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, parallel int) e
 				<-throttle
 			}()
 
-			err := r.retrieve(ctx, t)
+			err := r.retrieve(ctx, t, mp.Post)
 			if err != nil {
 				log.Error(err)
 			}
@@ -124,7 +125,7 @@ func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, parallel int) e
 	return nil
 }
 
-func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
+func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
 	store := storage.NewDeferredStorageCar(os.TempDir(), t.payloadCID)
 	defer store.Close()
 
@@ -140,6 +141,10 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 
 	_, err = r.lassie.Fetch(ctx, req)
 	if err != nil {
+		if !post {
+			return err
+		}
+
 		var result string
 		if strings.Contains(err.Error(), "retrieval timed out after") {
 			result = "TIMEOUT"
@@ -159,6 +164,20 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task) error {
 	block, err := store.Get(ctx, t.payloadCID.KeyString())
 	if err != nil {
 		return err
+	}
+
+	err = verify(&RootBlock{
+		Root:  t.payloadCID.String(),
+		Block: block,
+	})
+	if err != nil {
+		return err
+	}
+
+	log.Debugw("fetch success", "root", t.payloadCID.String(), "size", len(block))
+
+	if !post {
+		return nil
 	}
 
 	err = PostRootBlock(r.repo.Conf.ServerAddr, t.payloadCID.String(), block)
@@ -189,9 +208,9 @@ func (r *Retrieve) tasks(ctx context.Context, providers []string, limit int, res
 
 		} else {
 			if result == "" {
-				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL LIMIT $2`, p, limit)
+				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result IS NULL ORDER BY RANDOM() LIMIT $2`, p, limit)
 			} else {
-				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result=$2 LIMIT $3`, p, result, limit)
+				rows, err = r.repo.DB.QueryContext(ctx, `SELECT deal_id,payload_cid,provider FROM Deals WHERE provider=$1 AND result=$2 ORDER BY RANDOM() LIMIT $3`, p, result, limit)
 			}
 		}
 		if err != nil {
@@ -280,6 +299,24 @@ func PostRootBlock(addr string, root string, block []byte) error {
 			return err
 		}
 		return fmt.Errorf("status: %s msg: %s", resp.Status, string(r))
+	}
+
+	return nil
+}
+
+func verify(rb *RootBlock) error {
+	root, err := cid.Parse(rb.Root)
+	if err != nil {
+		return err
+	}
+
+	new, err := root.Prefix().Sum(rb.Block)
+	if err != nil {
+		return err
+	}
+
+	if !new.Equals(root) {
+		return fmt.Errorf("cid not match, %s!=%s", root, new)
 	}
 
 	return nil

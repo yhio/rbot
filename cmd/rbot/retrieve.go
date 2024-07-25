@@ -30,6 +30,10 @@ var retrieveCmd = &cli.Command{
 			Name:  "result",
 			Value: "",
 		},
+		&cli.BoolFlag{
+			Name:  "post",
+			Value: true,
+		},
 		&cli.StringFlag{
 			Name:  "connect",
 			Value: "127.0.0.1:5678",
@@ -41,6 +45,7 @@ var retrieveCmd = &cli.Command{
 			Limit:     cctx.Int("limit"),
 			Parallel:  cctx.Int("parallel"),
 			Result:    cctx.String("result"),
+			Post:      cctx.Bool("post"),
 		}
 		body, err := json.Marshal(&mp)
 		if err != nil {
