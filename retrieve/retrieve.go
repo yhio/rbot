@@ -126,6 +126,8 @@ func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, mp *ManualParam
 }
 
 func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
+	log.Debugw("retrieve", "dealID", t.dealID, "payload", t.payloadCID, "provider", t.provider)
+
 	store := storage.NewDeferredStorageCar(os.TempDir(), t.payloadCID)
 	defer store.Close()
 
@@ -144,7 +146,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
 		if !post {
 			return err
 		}
-
+		log.Debugw("fetch err", "dealID", t.dealID, "paylod", t.payloadCID, "provider", t.provider, "err", err)
 		var result string
 		if strings.Contains(err.Error(), "retrieval timed out after") {
 			result = "TIMEOUT"
@@ -153,7 +155,6 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
 		} else if strings.Contains(err.Error(), "there is no unsealed piece containing payload cid") {
 			result = "NOUNSEALED"
 		} else {
-			log.Errorw("fetch", "paylod", t.payloadCID, "err", err)
 			result = "ERR"
 		}
 
