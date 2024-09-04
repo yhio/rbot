@@ -1,7 +1,6 @@
 package car
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/service-sdk/go-sdk-qn/v2/operation"
@@ -40,9 +39,6 @@ func (r *QNReadAt) ReadAt(p []byte, off int64) (n int, err error) {
 	l, data, err := r.downloader.DownloadRangeBytes(r.key, off, size)
 	if err != nil {
 		return 0, err
-	}
-	if l != int64(len(data)) {
-		return 0, fmt.Errorf("downloaded data size %d does not match %d", len(data), l)
 	}
 	log.Debugw("read at", "key", r.key, "off", off, "size", size, "data", len(data), "l", l)
 

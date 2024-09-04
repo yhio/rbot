@@ -2,8 +2,11 @@ package car
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -12,7 +15,9 @@ import (
 	"github.com/gh-efforts/rbot/post"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
+	carv1 "github.com/ipld/go-car"
 	"github.com/ipld/go-car/v2/blockstore"
+	"github.com/service-sdk/go-sdk-qn/v2/operation"
 )
 
 var log = logging.Logger("car")
@@ -81,41 +86,120 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			payloadCid, err := cid.Parse(info.DataCid)
+			payloadCid, block, err := fetchV3(ctx, info)
 			if err != nil {
-				log.Errorf("parse data cid error: %v", err)
+				log.Errorf("fetchv error: %v", err)
 				return
 			}
 
-			reader, err := NewQNReadAt(info.FileName)
-			if err != nil {
-				log.Errorf("create qn reader error: %v", err)
-				return
-			}
-
-			br, err := blockstore.NewReadOnly(reader, nil)
-			if err != nil {
-				log.Errorf("create blockstore error: %v", err)
-				return
-			}
-
-			block, err := br.Get(ctx, payloadCid)
-			if err != nil {
-				log.Errorf("get block error: %v", err)
-				return
-			}
-
-			err = c.post.PostRootBlock(payloadCid.String(), block.RawData())
+			err = c.post.PostRootBlock(payloadCid, block)
 			if err != nil {
 				log.Errorf("post block error: %v", err)
 				return
 			}
 
-			roots, err := br.Roots()
-			log.Debugw("fetch", "payloadCid", payloadCid, "roots", roots, "pieceCid", info.PieceCid, "err", err)
-
 		}(carInfo)
 	}
 
 	return nil
+}
+
+func fetchV1(ctx context.Context, info CarInfo) (string, []byte, error) {
+	payloadCid, err := cid.Parse(info.DataCid)
+	if err != nil {
+		return "", nil, err
+	}
+
+	reader, err := NewQNReadAt(info.FileName)
+	if err != nil {
+		return "", nil, err
+	}
+
+	br, err := blockstore.NewReadOnly(reader, nil)
+	if err != nil {
+		return "", nil, err
+	}
+
+	block, err := br.Get(ctx, payloadCid)
+	if err != nil {
+		return "", nil, err
+	}
+
+	roots, _ := br.Roots()
+	log.Debugw("fetchV1", "payloadCid", payloadCid, "roots", roots)
+
+	return payloadCid.String(), block.RawData(), nil
+}
+
+func fetchV2(ctx context.Context, info CarInfo) (string, []byte, error) {
+	payloadCid, err := cid.Parse(info.DataCid)
+	if err != nil {
+		return "", nil, err
+	}
+
+	downloader := operation.NewDownloaderV2()
+	resp, err := downloader.DownloadRaw(info.FileName, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", nil, err
+	}
+
+	carReader := bytes.NewReader(body)
+	br, err := blockstore.NewReadOnly(carReader, nil)
+	if err != nil {
+		return "", nil, err
+	}
+
+	block, err := br.Get(ctx, payloadCid)
+	if err != nil {
+		return "", nil, err
+	}
+
+	roots, _ := br.Roots()
+	log.Debugw("fetchV2", "payloadCid", payloadCid, "roots", roots)
+
+	return block.Cid().String(), block.RawData(), nil
+
+}
+
+func fetchV3(ctx context.Context, info CarInfo) (string, []byte, error) {
+	payloadCid, err := cid.Parse(info.DataCid)
+	if err != nil {
+		return "", nil, err
+	}
+
+	downloader := operation.NewDownloaderV2()
+	resp, err := downloader.DownloadRaw(info.FileName, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+
+	carReader, err := carv1.NewCarReader(resp.Body)
+	if err != nil {
+		return "", nil, err
+	}
+
+	count := 0
+	for {
+		count++
+		block, err := carReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", nil, err
+		}
+		if block.Cid() == payloadCid {
+			log.Debugw("fetchV3", "payloadCid", payloadCid, "count", count, "roots", carReader.Header.Roots)
+			return block.Cid().String(), block.RawData(), nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("block: %s not found", payloadCid)
 }
