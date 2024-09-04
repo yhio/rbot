@@ -10,6 +10,8 @@ import (
 	cliutil "github.com/filecoin-project/lotus/cli/util"
 	"github.com/gh-efforts/rbot/backfill"
 	"github.com/gh-efforts/rbot/build"
+	"github.com/gh-efforts/rbot/car"
+	"github.com/gh-efforts/rbot/post"
 	"github.com/gh-efforts/rbot/repo"
 	"github.com/gh-efforts/rbot/retrieve"
 
@@ -24,6 +26,7 @@ func main() {
 		runCmd,
 		retrieveCmd,
 		backfillCmd,
+		carCmd,
 	}
 
 	app := &cli.App{
@@ -71,7 +74,12 @@ var runCmd = &cli.Command{
 		if err != nil {
 			return err
 		}
-		rt, err := retrieve.New(ctx, r)
+		post := post.NewPost(r.Conf.ServerAddr)
+		rt, err := retrieve.New(ctx, r, post)
+		if err != nil {
+			return err
+		}
+		car, err := car.New(ctx, post)
 		if err != nil {
 			return err
 		}
@@ -79,8 +87,9 @@ var runCmd = &cli.Command{
 		listen := cctx.String("listen")
 		log.Infow("rbot server", "listen", listen)
 
-		http.HandleFunc("/backfill", backfill.New(r).Fill)
-		http.HandleFunc("/retrieve", rt.ManualRetrieve)
+		http.HandleFunc("POST /backfill", backfill.New(r).Fill)
+		http.HandleFunc("POST /retrieve", rt.ManualRetrieve)
+		http.HandleFunc("GET /car", car.Fetch)
 
 		server := &http.Server{
 			Addr: listen,
@@ -107,4 +116,6 @@ func setLog(debug bool) {
 	logging.SetLogLevel("repo", level)
 	logging.SetLogLevel("retrieve", level)
 	logging.SetLogLevel("backfill", level)
+	logging.SetLogLevel("car", level)
+	logging.SetLogLevel("post", level)
 }
