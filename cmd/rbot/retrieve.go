@@ -12,8 +12,8 @@ import (
 )
 
 var retrieveCmd = &cli.Command{
-	Name:  "retrieve",
-	Usage: "manual retrieve",
+	Name:        "retrieve",
+	Description: "retrieve root block from provider and post to retrieve server",
 	Flags: []cli.Flag{
 		&cli.StringSliceFlag{
 			Name: "provider",

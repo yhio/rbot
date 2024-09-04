@@ -7,9 +7,11 @@ require (
 	github.com/filecoin-project/go-state-types v0.14.0-dev
 	github.com/filecoin-project/lotus v1.27.1
 	github.com/ipfs/go-log/v2 v2.5.1
+	github.com/ipld/go-car/v2 v2.13.1
 	github.com/ipld/go-trustless-utils v0.4.1
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/service-sdk/go-sdk-qn/v2 v2.0.1
 	github.com/urfave/cli/v2 v2.27.2
 )
 
@@ -26,6 +28,7 @@ require (
 	github.com/filecoin-project/go-retrieval-types v1.2.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
+	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
@@ -38,11 +41,11 @@ require (
 	github.com/ipfs/go-ipfs-pq v0.0.3 // indirect
 	github.com/ipfs/go-peertaskqueue v0.8.1 // indirect
 	github.com/ipfs/go-unixfsnode v1.9.0 // indirect
-	github.com/ipld/go-car/v2 v2.13.1 // indirect
 	github.com/ipld/go-ipld-prime v0.21.0 // indirect
 	github.com/ipni/go-libipni v0.6.6 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
+	github.com/kirsle/configdir v0.0.0-20170128060238-e45d2f54772f // indirect
 	github.com/koron/go-ssdp v0.0.4 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-libp2p-record v0.2.0 // indirect
@@ -58,6 +61,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.17.3 // indirect
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
+	github.com/pelletier/go-toml v1.8.1 // indirect
 	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.11 // indirect

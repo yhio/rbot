@@ -1,12 +1,9 @@
 package retrieve
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -17,6 +14,7 @@ import (
 	"github.com/filecoin-project/lassie/pkg/lassie"
 	"github.com/filecoin-project/lassie/pkg/storage"
 	ltypes "github.com/filecoin-project/lassie/pkg/types"
+	"github.com/gh-efforts/rbot/post"
 	"github.com/gh-efforts/rbot/repo"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
@@ -29,6 +27,7 @@ type Retrieve struct {
 	repo    *repo.Repo
 	lassie  *lassie.Lassie
 	indexer *indexerlookup.IndexerCandidateSource
+	post    *post.Post
 }
 
 type task struct {
@@ -45,7 +44,7 @@ type ManualParam struct {
 	Post      bool     `json:"post"`
 }
 
-func New(ctx context.Context, repo *repo.Repo) (*Retrieve, error) {
+func New(ctx context.Context, repo *repo.Repo, post *post.Post) (*Retrieve, error) {
 	lassie, err := lassie.NewLassie(ctx)
 	if err != nil {
 		return nil, err
@@ -60,6 +59,7 @@ func New(ctx context.Context, repo *repo.Repo) (*Retrieve, error) {
 		repo:    repo,
 		lassie:  lassie,
 		indexer: indexer,
+		post:    post,
 	}
 
 	return r, nil
@@ -125,7 +125,7 @@ func (r *Retrieve) retrieves(ctx context.Context, tasks []*task, mp *ManualParam
 	return nil
 }
 
-func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
+func (r *Retrieve) retrieve(ctx context.Context, t *task, postBlock bool) error {
 	log.Debugw("retrieve", "dealID", t.dealID, "payload", t.payloadCID, "provider", t.provider)
 
 	store := storage.NewDeferredStorageCar(os.TempDir(), t.payloadCID)
@@ -143,7 +143,7 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
 
 	_, err = r.lassie.Fetch(ctx, req)
 	if err != nil {
-		if !post {
+		if !postBlock {
 			return err
 		}
 		log.Debugw("fetch err", "dealID", t.dealID, "paylod", t.payloadCID, "provider", t.provider, "err", err)
@@ -167,21 +167,13 @@ func (r *Retrieve) retrieve(ctx context.Context, t *task, post bool) error {
 		return err
 	}
 
-	err = verify(&RootBlock{
-		Root:  t.payloadCID.String(),
-		Block: block,
-	})
-	if err != nil {
-		return err
-	}
-
 	log.Debugw("fetch success", "root", t.payloadCID.String(), "size", len(block))
 
-	if !post {
+	if !postBlock {
 		return nil
 	}
 
-	err = PostRootBlock(r.repo.Conf.ServerAddr, t.payloadCID.String(), block)
+	err = r.post.PostRootBlock(t.payloadCID.String(), block)
 	if err != nil {
 		return err
 	}
@@ -269,56 +261,4 @@ func (r *Retrieve) providers(ctx context.Context) ([]string, error) {
 
 	log.Debugf("provider: %s", providers)
 	return providers, nil
-}
-
-type RootBlock struct {
-	Root  string `json:"root"`
-	Block []byte `json:"block"`
-}
-
-func PostRootBlock(addr string, root string, block []byte) error {
-	rb := RootBlock{
-		Root:  root,
-		Block: block,
-	}
-
-	body, err := json.Marshal(&rb)
-	if err != nil {
-		return err
-	}
-
-	url := fmt.Sprintf("http://%s/block", addr)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		r, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("status: %s msg: %s", resp.Status, string(r))
-	}
-
-	return nil
-}
-
-func verify(rb *RootBlock) error {
-	root, err := cid.Parse(rb.Root)
-	if err != nil {
-		return err
-	}
-
-	new, err := root.Prefix().Sum(rb.Block)
-	if err != nil {
-		return err
-	}
-
-	if !new.Equals(root) {
-		return fmt.Errorf("cid not match, %s!=%s", root, new)
-	}
-
-	return nil
 }
