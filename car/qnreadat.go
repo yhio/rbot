@@ -19,6 +19,7 @@ func NewQNReadAt(key string) (*QNReadAt, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Debugw("NewQNReadAt", "key", key, "size", size)
 
 	return &QNReadAt{
 		key:        key,
@@ -43,6 +44,7 @@ func (r *QNReadAt) ReadAt(p []byte, off int64) (n int, err error) {
 	if l != int64(len(data)) {
 		return 0, fmt.Errorf("downloaded data size %d does not match %d", len(data), l)
 	}
+	log.Debugw("read at", "key", r.key, "off", off, "size", size, "data", len(data), "l", l)
 
 	return copy(p, data), nil
 }
