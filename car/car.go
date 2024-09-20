@@ -88,7 +88,7 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 
 			payloadCid, block, err := fetchV3(ctx, info)
 			if err != nil {
-				log.Errorf("fetchv error: %v", err)
+				log.Errorf("%s fetch error: %v", info.FileName, err)
 				return
 			}
 
