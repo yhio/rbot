@@ -93,7 +93,7 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			payloadCid, block, err := c.fetchRootBlock(ctx, info)
+			payloadCid, block, err := c.fetchRootBlock(info)
 			if err != nil {
 				log.Errorf("%s fetch error: %v", info.FileName, err)
 				return
@@ -111,7 +111,7 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 	return nil
 }
 
-func (c *Car) fetchRootBlock(ctx context.Context, info CarInfo) (string, []byte, error) {
+func (c *Car) fetchRootBlock(info CarInfo) (string, []byte, error) {
 	payloadCid, err := cid.Parse(info.DataCid)
 	if err != nil {
 		return "", nil, err
@@ -127,7 +127,7 @@ func (c *Car) fetchRootBlock(ctx context.Context, info CarInfo) (string, []byte,
 		if err != nil {
 			return "", nil, err
 		}
-		object, err := minioClient.GetObject(ctx, c.mc.Bucket, info.FileName, minio.GetObjectOptions{})
+		object, err := minioClient.GetObject(context.Background(), c.mc.Bucket, info.FileName, minio.GetObjectOptions{})
 		if err != nil {
 			return "", nil, err
 		}
