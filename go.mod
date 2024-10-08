@@ -7,7 +7,6 @@ require (
 	github.com/filecoin-project/go-state-types v0.14.0-dev
 	github.com/filecoin-project/lotus v1.27.1
 	github.com/ipfs/go-log/v2 v2.5.1
-	github.com/ipld/go-car/v2 v2.13.1
 	github.com/ipld/go-trustless-utils v0.4.1
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/mitchellh/go-homedir v1.1.0
@@ -41,6 +40,7 @@ require (
 	github.com/ipfs/go-ipfs-pq v0.0.3 // indirect
 	github.com/ipfs/go-peertaskqueue v0.8.1 // indirect
 	github.com/ipfs/go-unixfsnode v1.9.0 // indirect
+	github.com/ipld/go-car/v2 v2.13.1 // indirect
 	github.com/ipld/go-ipld-prime v0.21.0 // indirect
 	github.com/ipni/go-libipni v0.6.6 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect

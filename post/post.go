@@ -11,7 +11,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 )
 
-var log = logging.Logger("car")
+var log = logging.Logger("post")
 
 type Post struct {
 	url    string

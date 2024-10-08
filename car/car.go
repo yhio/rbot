@@ -2,7 +2,6 @@ package car
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	carv1 "github.com/ipld/go-car"
-	"github.com/ipld/go-car/v2/blockstore"
 	"github.com/service-sdk/go-sdk-qn/v2/operation"
 )
 
@@ -86,7 +84,7 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			payloadCid, block, err := fetchV3(ctx, info)
+			payloadCid, block, err := _fetch(ctx, info)
 			if err != nil {
 				log.Errorf("%s fetch error: %v", info.FileName, err)
 				return
@@ -104,70 +102,7 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 	return nil
 }
 
-func fetchV1(ctx context.Context, info CarInfo) (string, []byte, error) {
-	payloadCid, err := cid.Parse(info.DataCid)
-	if err != nil {
-		return "", nil, err
-	}
-
-	reader, err := NewQNReadAt(info.FileName)
-	if err != nil {
-		return "", nil, err
-	}
-
-	br, err := blockstore.NewReadOnly(reader, nil)
-	if err != nil {
-		return "", nil, err
-	}
-
-	block, err := br.Get(ctx, payloadCid)
-	if err != nil {
-		return "", nil, err
-	}
-
-	roots, _ := br.Roots()
-	log.Debugw("fetchV1", "payloadCid", payloadCid, "roots", roots)
-
-	return payloadCid.String(), block.RawData(), nil
-}
-
-func fetchV2(ctx context.Context, info CarInfo) (string, []byte, error) {
-	payloadCid, err := cid.Parse(info.DataCid)
-	if err != nil {
-		return "", nil, err
-	}
-
-	downloader := operation.NewDownloaderV2()
-	resp, err := downloader.DownloadRaw(info.FileName, nil)
-	if err != nil {
-		return "", nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", nil, err
-	}
-
-	carReader := bytes.NewReader(body)
-	br, err := blockstore.NewReadOnly(carReader, nil)
-	if err != nil {
-		return "", nil, err
-	}
-
-	block, err := br.Get(ctx, payloadCid)
-	if err != nil {
-		return "", nil, err
-	}
-
-	roots, _ := br.Roots()
-	log.Debugw("fetchV2", "payloadCid", payloadCid, "roots", roots)
-
-	return block.Cid().String(), block.RawData(), nil
-
-}
-
-func fetchV3(ctx context.Context, info CarInfo) (string, []byte, error) {
+func _fetch(ctx context.Context, info CarInfo) (string, []byte, error) {
 	payloadCid, err := cid.Parse(info.DataCid)
 	if err != nil {
 		return "", nil, err
