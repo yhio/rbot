@@ -15,6 +15,8 @@ import (
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	carv1 "github.com/ipld/go-car"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/service-sdk/go-sdk-qn/v2/operation"
 )
 
@@ -22,6 +24,7 @@ var log = logging.Logger("car")
 
 type Car struct {
 	post *post.Post
+	mc   *MinioConfig
 }
 
 type CarInfo struct {
@@ -33,8 +36,14 @@ type CarInfo struct {
 }
 
 func New(ctx context.Context, post *post.Post) (*Car, error) {
+	mc, err := getMinioConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Car{
 		post: post,
+		mc:   mc,
 	}, nil
 }
 
@@ -84,7 +93,7 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			payloadCid, block, err := _fetch(ctx, info)
+			payloadCid, block, err := c.fetchRootBlock(ctx, info)
 			if err != nil {
 				log.Errorf("%s fetch error: %v", info.FileName, err)
 				return
@@ -102,22 +111,45 @@ func (c *Car) fetch(ctx context.Context, path string, parallel int) error {
 	return nil
 }
 
-func _fetch(ctx context.Context, info CarInfo) (string, []byte, error) {
+func (c *Car) fetchRootBlock(ctx context.Context, info CarInfo) (string, []byte, error) {
 	payloadCid, err := cid.Parse(info.DataCid)
 	if err != nil {
 		return "", nil, err
 	}
 
-	downloader := operation.NewDownloaderV2()
-	resp, err := downloader.DownloadRaw(info.FileName, nil)
-	if err != nil {
-		return "", nil, err
-	}
-	defer resp.Body.Close()
+	var carReader *carv1.CarReader
+	if c.mc != nil {
+		minioClient, err := minio.New(c.mc.Endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(c.mc.AccessKey, c.mc.SecretKey, ""),
+			Secure: c.mc.UseSSL,
+			Region: c.mc.Region,
+		})
+		if err != nil {
+			return "", nil, err
+		}
+		object, err := minioClient.GetObject(ctx, c.mc.Bucket, info.FileName, minio.GetObjectOptions{})
+		if err != nil {
+			return "", nil, err
+		}
+		defer object.Close()
 
-	carReader, err := carv1.NewCarReader(resp.Body)
-	if err != nil {
-		return "", nil, err
+		carReader, err = carv1.NewCarReader(object)
+		if err != nil {
+			return "", nil, err
+		}
+
+	} else {
+		downloader := operation.NewDownloaderV2()
+		resp, err := downloader.DownloadRaw(info.FileName, nil)
+		if err != nil {
+			return "", nil, err
+		}
+		defer resp.Body.Close()
+
+		carReader, err = carv1.NewCarReader(resp.Body)
+		if err != nil {
+			return "", nil, err
+		}
 	}
 
 	count := 0
@@ -131,7 +163,7 @@ func _fetch(ctx context.Context, info CarInfo) (string, []byte, error) {
 			return "", nil, err
 		}
 		if block.Cid() == payloadCid {
-			log.Debugw("fetchV3", "payloadCid", payloadCid, "count", count, "roots", carReader.Header.Roots)
+			log.Debugw("fetchRootBlock", "payloadCid", payloadCid, "count", count, "roots", carReader.Header.Roots)
 			return block.Cid().String(), block.RawData(), nil
 		}
 	}
