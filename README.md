@@ -24,3 +24,7 @@
 1. 启动 rbot 增加环境变量：export MINIO=./minio.json
 2. ./rbot car ./hpgp.json
 
+## 从文件系统读取 rootblock
+1. 启动 rbot 增加环境变量：export FILE_PATH=/path/to/car
+2. ./rbot car ./hpgp.json
+

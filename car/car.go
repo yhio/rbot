@@ -118,7 +118,7 @@ func (c *Car) fetchRootBlock(info CarInfo) (string, []byte, error) {
 	}
 
 	var carReader *carv1.CarReader
-	if c.mc != nil {
+	if os.Getenv("MINIO") != "" && c.mc != nil {
 		minioClient, err := minio.New(c.mc.Endpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(c.mc.AccessKey, c.mc.SecretKey, ""),
 			Secure: c.mc.UseSSL,
@@ -138,7 +138,7 @@ func (c *Car) fetchRootBlock(info CarInfo) (string, []byte, error) {
 			return "", nil, err
 		}
 
-	} else {
+	} else if os.Getenv("QINIU") != "" {
 		downloader := operation.NewDownloaderV2()
 		resp, err := downloader.DownloadRaw(info.FileName, nil)
 		if err != nil {
@@ -150,6 +150,18 @@ func (c *Car) fetchRootBlock(info CarInfo) (string, []byte, error) {
 		if err != nil {
 			return "", nil, err
 		}
+	} else if os.Getenv("FILE_PATH") != "" {
+		file, err := os.Open(os.Getenv("FILE_PATH") + "/" + info.FileName)
+		if err != nil {
+			return "", nil, err
+		}
+		defer file.Close()
+		carReader, err = carv1.NewCarReader(file)
+		if err != nil {
+			return "", nil, err
+		}
+	} else {
+		return "", nil, fmt.Errorf("no config")
 	}
 
 	count := 0
